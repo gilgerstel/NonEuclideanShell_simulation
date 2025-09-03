@@ -21,6 +21,8 @@
 #include "gsl/gsl_vector.h"
 #include <string>
 #include <vector> 
+#include <set>
+
 
 /*
  class Node
@@ -222,6 +224,8 @@ class Face
         double area() const { return m_area; }
 		double getLambdaG() const { return m_lambdaG; }
 		double getMuG() const { return m_muG; }
+		Node* node(int i) const { return m_nodes(i); }    // 0,1,2 are the triangle’s vertices
+
 
 
 	private:
@@ -262,6 +266,7 @@ class Face
 		TinyMatrix< TinyMatrix<double,2>, 2 > m_gammabar;
 
 
+
 	};
 
 
@@ -280,7 +285,10 @@ class NonEuclideanShell
 	{
 	public:
 		void checkNodePositions() const;
-	    void cotangentSmooth(double baseAlpha);
+	    double meanEdgeLength() const;
+		/// Return all mesh‐adjacent vertex indices for vertex v
+		std::vector<int> getVertexNeighbors(int v) const;
+
 
 		const Vector<Face*>& getFaces() const;
 

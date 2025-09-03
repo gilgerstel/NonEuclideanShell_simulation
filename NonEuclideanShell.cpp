@@ -15,6 +15,7 @@
 #include <map>
 #include "LapackWrapper.H"   // for luDecompose() / luSolve()
 #include <algorithm>   // for std::clamp
+#include <limits>
 
 
 
@@ -1185,6 +1186,37 @@ NonEuclideanShell::~NonEuclideanShell()
 }
 
 /* ============================================================================== */
+
+std::vector<int> NonEuclideanShell::getVertexNeighbors(int v) const {
+    std::vector<int> nbrs;
+    // the Node* we’re interested in
+    Node* target = m_nodes(v);
+
+    // for every face, if 'target' is one of its 3 vertices, add the other two
+    for (int fi = 0; fi < m_faces.length(); ++fi) {
+        Face* f = m_faces(fi);
+        for (int ei = 0; ei < 3; ++ei) {
+            if (f->node(ei) == target) {
+                // grab the other two corner indices
+                for (int k = 1; k <= 2; ++k) {
+                    Node* nbrNode = f->node((ei + k) % 3);
+                    // find its index in m_nodes
+                    for (int ni = 0; ni < m_nodes.length(); ++ni) {
+                        if (m_nodes(ni) == nbrNode) {
+                            if (std::find(nbrs.begin(), nbrs.end(), ni) == nbrs.end())
+                                nbrs.push_back(ni);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return nbrs;
+}
+
+
+/* ============================================================================== */
 /* Set reference forms and parameters */
 void NonEuclideanShell::setParameters(double (*f_thickness)(double, double),
 									  double (*f_lambda)(double, double),
@@ -1287,7 +1319,32 @@ void NonEuclideanShell::initializeForce()
 	for (int i=0; i<m_nodes.length(); i++)
 		m_nodes(i)->force().setToZero();
 }
-/* ============================================================================== *
+/* ============================================================================== */
+
+double NonEuclideanShell::meanEdgeLength() const {
+    int n = m_nodes.length();                                                 // total nodes :contentReference[oaicite:3]{index=3}
+    double sumNN = 0.0;
+
+    // For each node, find its closest neighbor
+    for (int i = 0; i < n; ++i) {
+        auto ri = m_nodes(i)->position();                                      // TinyVector<double,3>
+        double best = std::numeric_limits<double>::infinity();
+
+        for (int j = 0; j < n; ++j) {
+            if (i == j) continue;
+            auto rj = m_nodes(j)->position();
+            double dx = ri(0) - rj(0);
+            double dy = ri(1) - rj(1);
+            double dz = ri(2) - rj(2);
+            double d  = std::sqrt(dx*dx + dy*dy + dz*dz);
+            if (d < best) best = d;
+        }
+
+        sumNN += best;
+    }
+
+    return sumNN / n;
+}
 
 /* ============================================================================== */
 /* Calculate the stretching energy */
@@ -1461,9 +1518,12 @@ void NonEuclideanShell::DumpStateTextFormat(TextFileHandle* a_node, TextFileHand
 
 	for (int i=0; i<m_faces.length(); i++)
 	{
-		double Es = m_faces(i)->stretchingEnergyContentDensity();
-		double Eb = m_faces(i)->bendingEnergyContentDensity();
-		double Eg = m_faces(i)->connectionEnergyContentDensity();
+		// double Es = m_faces(i)->stretchingEnergyContentDensity();
+		// double Eb = m_faces(i)->bendingEnergyContentDensity();
+		// double Eg = m_faces(i)->connectionEnergyContentDensity();
+		double Es = m_faces(i)->stretchingEnergy();
+		double Eb = m_faces(i)->bendingEnergy();
+		double Eg = m_faces(i)->connectionEnergy();
 		a_face->write(i);
 		a_face->tab();
 		a_face->write(Es);
@@ -1515,9 +1575,13 @@ void NonEuclideanShell::DumpFormsTextFormat(TextFileHandle* a_face)
         auto   EFGv   = m_faces(i)->EFG();
         auto   LMNv   = m_faces(i)->LMN();
         auto   UVv    = m_faces(i)->coordinates();
-        double Es  = m_faces(i)->stretchingEnergyContentDensity();
-		double Eb  = m_faces(i)->bendingEnergyContentDensity();
-		double Eg  = m_faces(i)->connectionEnergyContentDensity();
+        // double Es  = m_faces(i)->stretchingEnergyContentDensity();
+		// double Eb  = m_faces(i)->bendingEnergyContentDensity();
+		// double Eg  = m_faces(i)->connectionEnergyContentDensity();
+
+		double Es  = m_faces(i)->stretchingEnergy();
+		double Eb  = m_faces(i)->bendingEnergy();
+		double Eg  = m_faces(i)->connectionEnergy();
 
         a_face->write(i);        a_face->tab();
         a_face->write(UVv(0));   a_face->tab();
