@@ -149,6 +149,7 @@ class Face
                         double a_mu,
                         const TinyMatrix<double,2> a_abar,
                         const TinyMatrix<double,2> a_bbar,
+						const TinyMatrix<double,2> a_cbar,
                         const TinyMatrix< TinyMatrix<double,2>,2 >& a_gammabar,
 						double a_eta,
                         double a_lambdaG,
@@ -194,6 +195,7 @@ class Face
 		/* Calculate fundamental forms */
 		TinyVector<double,3> EFG() const;
 		TinyVector<double,3> LMN() const;
+		TinyVector<double,3> ABC() const;
 
         // /* γ-energy helpers */
         // TinyMatrix<double,2> computeMetric() const;
@@ -262,6 +264,7 @@ class Face
 		TinyVector<int,6>	 m_Bpivot;
 		TinyMatrix<double,2> m_abar;
 		TinyMatrix<double,2> m_bbar;
+		TinyMatrix<double,2> m_cbar;
 		TinyMatrix<double,2> m_invabar;
 		TinyMatrix< TinyMatrix<double,2>, 2 > m_gammabar;
 
@@ -334,6 +337,7 @@ class NonEuclideanShell
 		double (*f_mu)(double,double),
 		TinyMatrix<double,2> (*f_abar)(double,double),
 		TinyMatrix<double,2> (*f_bbar)(double,double),
+		TinyMatrix<double,2> (*f_cbar)(double,double),
 		TinyVector<double,3> (*f_Pos0)(double,double),
 		TinyMatrix<TinyMatrix<double,2>,2> (*f_gammabar)(double,double),
 		double eta,

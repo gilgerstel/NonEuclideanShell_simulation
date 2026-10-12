@@ -24,9 +24,9 @@ namespace fs = std::filesystem;
 #include "MatlabFileHandle.H"
 #include "BinaryFileHandle.H"
 #include "TextFileHandle.H"
-#include "RefCountedPointer.H"
+// #include "RefCountedPointer.H"  // obsolete RKLibrary header
 #include "SpecialFunctions.H"
-#include "LapackWrapper.H"
+// #include "LapackWrapper.H"      // obsolete: LU routines are defined in TinyMatrix.H
 #include "Tensor2D.H"
 #include "TinyVector.H"
 #include "TinyMatrix.H"
@@ -48,6 +48,7 @@ void   my_fdf(const gsl_vector *, void *, double *, gsl_vector *);
 /* Forward declaration of input functions */
 TinyMatrix<double,2> inputFunctionAbar     (double, double);
 TinyMatrix<double,2> inputFunctionBbar     (double, double);
+TinyMatrix<double,2> inputFunctionCbar     (double, double);
 TinyVector<double,3> inputFunctionPos0     (double, double);
 double               inputFunctionThickness(double, double);
 double               inputFunctionLambda   (double, double);
@@ -370,6 +371,7 @@ int main() {
 						  &inputFunctionMu,
 						  &inputFunctionAbar,
 						  &inputFunctionBbar,
+						  &inputFunctionCbar,
                           &inputFunctionPos0,
                           &inputFunctionGammaBar,
 						  eta,
@@ -698,6 +700,18 @@ TinyMatrix<double,2> inputFunctionBbar(double u, double v)
 	ret(1,0) = op21.Val();
 	ret(1,1) = op22.Val();
 	return ret;
+}
+
+TinyMatrix<double,2> inputFunctionCbar(double u, double v)
+{
+    TinyMatrix<double,2> ret;
+
+    ret(0,0) = 0.0;
+    ret(0,1) = 0.0;
+    ret(1,0) = 0.0;
+    ret(1,1) = 0.0;
+
+    return ret;
 }
 
 double inputFunctionThickness(double u, double v)

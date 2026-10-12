@@ -13,7 +13,7 @@
 #include <vector>
 #include <unordered_map>
 #include <map>
-#include "LapackWrapper.H"   // for luDecompose() / luSolve()
+// #include "LapackWrapper.H"   // obsolete: luDecompose/luSolve are defined in TinyMatrix.H
 #include <algorithm>   // for std::clamp
 #include <limits>
 
@@ -43,6 +43,7 @@ m_Bmatrix(),
 m_Bpivot(),
 m_abar(),
 m_bbar(),
+m_cbar(),
 m_invabar(),
 m_adjust1(1.0),
 m_adjust2(1.0),
@@ -75,12 +76,13 @@ void Face::assignNeighbors(const TinyVector<Face*,3> &a_faces)
 /* ============================================================================== */
 /* Initialization */
 void Face::initialize(double a_thickness,
-					  double a_lambda,
-					  double a_mu,
-					  const TinyMatrix<double,2> a_abar,
-					  const TinyMatrix<double,2> a_bbar,
+                      double a_lambda,
+                      double a_mu,
+                      const TinyMatrix<double,2> a_abar,
+                      const TinyMatrix<double,2> a_bbar,
+                      const TinyMatrix<double,2> a_cbar,
                       const TinyMatrix< TinyMatrix<double,2>,2 >& a_gammabar,
-					  double a_eta,
+                      double a_eta,
                       double a_lambdaG,
                       double a_muG)
 {
@@ -90,6 +92,7 @@ void Face::initialize(double a_thickness,
 	m_mu        = a_mu;
 	m_abar      = a_abar;
 	m_bbar      = a_bbar;
+	m_cbar      = a_cbar;
     m_gammabar  = a_gammabar;
 	m_eta       = a_eta;
 
@@ -946,6 +949,38 @@ TinyVector<double,3> Face::LMN() const
 }
 
 /* ============================================================================== */
+/* Calculate the third fundamental form c = b a^{-1} b */
+TinyVector<double,3> Face::ABC() const
+{
+    // First fundamental form
+    TinyVector<double,3> ef = EFG();
+
+    TinyMatrix<double,2> a;
+    a(0,0) = ef(0);
+    a(0,1) = ef(1);
+    a(1,0) = ef(1);
+    a(1,1) = ef(2);
+
+    // Second fundamental form
+    TinyVector<double,3> lmn = LMN();
+
+    TinyMatrix<double,2> b;
+    b(0,0) = lmn(0);
+    b(0,1) = lmn(1);
+    b(1,0) = lmn(1);
+    b(1,1) = lmn(2);
+
+    // c = b a^{-1} b
+    TinyMatrix<double,2> c = b * a.inverse() * b;
+
+    TinyVector<double,3> abc;
+    abc(0) = c(0,0);
+    abc(1) = c(0,1);
+    abc(2) = c(1,1);
+
+    return abc;
+}
+/* ============================================================================== */
 
 
 /* ==============================================================================  */
@@ -1223,6 +1258,7 @@ void NonEuclideanShell::setParameters(double (*f_thickness)(double, double),
 									  double (*f_mu)(double, double),
 									  TinyMatrix<double,2> (*f_abar)(double, double),
 									  TinyMatrix<double,2> (*f_bbar)(double, double),
+									  TinyMatrix<double,2> (*f_cbar)(double, double),
 									  TinyVector<double,3> (*f_Pos0)(double, double),
 									  TinyMatrix<TinyMatrix<double,2>,2> (*f_gammabar)(double, double),
 									  double eta,
@@ -1240,9 +1276,10 @@ void NonEuclideanShell::setParameters(double (*f_thickness)(double, double),
 		double mu        = f_mu(u,v);
 		TinyMatrix<double,2> abar      = f_abar(u,v);
 		TinyMatrix<double,2> bbar      = f_bbar(u,v);
+		TinyMatrix<double,2> cbar      = f_cbar(u,v);
         TinyMatrix<TinyMatrix<double,2>,2> gammabar = f_gammabar(u, v);
 
-		m_faces(i)->initialize(thickness, lambda, mu, abar, bbar, gammabar, eta, lambdaG, muG);
+		m_faces(i)->initialize(thickness, lambda, mu, abar, bbar, cbar, gammabar, eta, lambdaG, muG);
     }
 
     // --- initialize node positions (unchanged) ---
@@ -1567,7 +1604,8 @@ void NonEuclideanShell::DumpStateTextFormat(TextFileHandle* a_node, TextFileHand
 // 	}
 // }
 /* ============================================================================== */
-/* Dump forms (E, F, G, L, M, N) + Γ⁽ᵏ⁾ᵢⱼ (2×2×2 = 8 values) to file (text) */
+/* Dump first, second, and third fundamental forms plus energy terms:
+   (E,F,G), (L,M,N), (c11,c12,c22), Es, Eb, Eg */
 void NonEuclideanShell::DumpFormsTextFormat(TextFileHandle* a_face)
 {
     for (int i = 0; i < m_faces.length(); ++i)
@@ -1575,6 +1613,7 @@ void NonEuclideanShell::DumpFormsTextFormat(TextFileHandle* a_face)
         auto   EFGv   = m_faces(i)->EFG();
         auto   LMNv   = m_faces(i)->LMN();
         auto   UVv    = m_faces(i)->coordinates();
+		auto ABCv = m_faces(i)->ABC();
         // double Es  = m_faces(i)->stretchingEnergyContentDensity();
 		// double Eb  = m_faces(i)->bendingEnergyContentDensity();
 		// double Eg  = m_faces(i)->connectionEnergyContentDensity();
@@ -1594,6 +1633,10 @@ void NonEuclideanShell::DumpFormsTextFormat(TextFileHandle* a_face)
         a_face->write(LMNv(0));  a_face->tab();
         a_face->write(LMNv(1));  a_face->tab();
         a_face->write(LMNv(2));  a_face->tab();
+
+		a_face->write(ABCv(0));  a_face->tab();
+		a_face->write(ABCv(1));  a_face->tab();
+		a_face->write(ABCv(2));  a_face->tab();
 
         a_face->write(Es);  a_face->tab();
 		a_face->write(Eb);  a_face->tab();
