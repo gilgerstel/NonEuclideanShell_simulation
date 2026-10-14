@@ -65,6 +65,11 @@ params = {
         "0", "0"
     ],
 
+    "cbar": [
+    "0", "0",
+    "0", "0"
+    ],
+
     # Material parameters
     "thickness": "0.01",
     "E": "1.0",

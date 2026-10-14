@@ -216,6 +216,7 @@ class Face
 
 		// read-only access to your stored reference γ-bar and weights
 		const TinyMatrix< TinyMatrix<double,2>,2 >& gammabar() const { return m_gammabar; }
+		const TinyMatrix<double,2>& cbar() const { return m_cbar; }
 		double lambdaG() const { return m_lambdaG; }
 		double muG() const     { return m_muG; }
 

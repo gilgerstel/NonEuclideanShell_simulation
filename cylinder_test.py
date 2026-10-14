@@ -67,6 +67,13 @@ params = {
         "0", "0"
     ],
 
+    # Reference third fundamental form.
+    # For a unit-radius cylinder, c = diag(1,0).
+    "cbar": [
+        "1", "0",
+        "0", "0"
+    ],
+
     "thickness": "0.01",
     "E": "1.0",
     "nu": "0.3",

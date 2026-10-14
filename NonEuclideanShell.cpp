@@ -1613,7 +1613,8 @@ void NonEuclideanShell::DumpFormsTextFormat(TextFileHandle* a_face)
         auto   EFGv   = m_faces(i)->EFG();
         auto   LMNv   = m_faces(i)->LMN();
         auto   UVv    = m_faces(i)->coordinates();
-		auto ABCv = m_faces(i)->ABC();
+		auto   ABCv   = m_faces(i)->ABC();
+		auto   Cbarv  = m_faces(i)->cbar();
         // double Es  = m_faces(i)->stretchingEnergyContentDensity();
 		// double Eb  = m_faces(i)->bendingEnergyContentDensity();
 		// double Eg  = m_faces(i)->connectionEnergyContentDensity();
@@ -1637,6 +1638,11 @@ void NonEuclideanShell::DumpFormsTextFormat(TextFileHandle* a_face)
 		a_face->write(ABCv(0));  a_face->tab();
 		a_face->write(ABCv(1));  a_face->tab();
 		a_face->write(ABCv(2));  a_face->tab();
+
+		a_face->write(Cbarv(0,0));  a_face->tab();
+		a_face->write(Cbarv(0,1));  a_face->tab();
+		a_face->write(Cbarv(1,0));  a_face->tab();
+		a_face->write(Cbarv(1,1));  a_face->tab();
 
         a_face->write(Es);  a_face->tab();
 		a_face->write(Eb);  a_face->tab();

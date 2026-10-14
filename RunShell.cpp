@@ -63,6 +63,12 @@ char* bbar11_formula;
 char* bbar12_formula;
 char* bbar21_formula;
 char* bbar22_formula;
+
+char* cbar11_formula;
+char* cbar12_formula;
+char* cbar21_formula;
+char* cbar22_formula;
+
 char* thickness_formula;
 char* Y_formula;
 char* nu_formula;
@@ -170,6 +176,22 @@ int main() {
 	strcpy(bbar22_formula, inputFormula.c_str());
 	// std::cout << "  (  " << bbar11_formula << "  ,  "  << bbar12_formula << "  )  "  << std::endl;
 	// std::cout << "  (  " << bbar21_formula << "  ,  "  << bbar22_formula << "  )  "  << std::endl;
+	// Read formulas for the reference third fundamental form cbar
+	std::cin >> inputFormula;
+	cbar11_formula = new char[inputFormula.length() + 1];
+	strcpy(cbar11_formula, inputFormula.c_str());
+
+	std::cin >> inputFormula;
+	cbar12_formula = new char[inputFormula.length() + 1];
+	strcpy(cbar12_formula, inputFormula.c_str());
+
+	std::cin >> inputFormula;
+	cbar21_formula = new char[inputFormula.length() + 1];
+	strcpy(cbar21_formula, inputFormula.c_str());
+
+	std::cin >> inputFormula;
+	cbar22_formula = new char[inputFormula.length() + 1];
+	strcpy(cbar22_formula, inputFormula.c_str());
 	// std::cout << "Enter formula in (u,v) for the thickness " << std::endl;
 	std::cin >> inputFormula;
 	thickness_formula = new char[inputFormula.length() + 1];
@@ -704,12 +726,24 @@ TinyMatrix<double,2> inputFunctionBbar(double u, double v)
 
 TinyMatrix<double,2> inputFunctionCbar(double u, double v)
 {
+    RVar uvar ("u", &u);
+    RVar vvar ("v", &v);
+
+    RVar* vararray[2];
+    vararray[0] = &uvar;
+    vararray[1] = &vvar;
+
+    ROperation op11(cbar11_formula, 2, vararray);
+    ROperation op12(cbar12_formula, 2, vararray);
+    ROperation op21(cbar21_formula, 2, vararray);
+    ROperation op22(cbar22_formula, 2, vararray);
+
     TinyMatrix<double,2> ret;
 
-    ret(0,0) = 0.0;
-    ret(0,1) = 0.0;
-    ret(1,0) = 0.0;
-    ret(1,1) = 0.0;
+    ret(0,0) = op11.Val();
+    ret(0,1) = op12.Val();
+    ret(1,0) = op21.Val();
+    ret(1,1) = op22.Val();
 
     return ret;
 }

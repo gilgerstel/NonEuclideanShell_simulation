@@ -313,11 +313,16 @@ def make_in_file(params, output_dir, sim_name):
     lines.append(str(params['save_every']))
 
     # flatten abar, bbar and pos0, casting to strings
+   # Reference first, second, and third fundamental forms
     lines.extend(str(x) for x in params['abar'])
     lines.extend(str(x) for x in params['bbar'])
-    lines.extend([ str(params['thickness']),
-                   str(params['E']),
-                   str(params['nu']) ])
+    lines.extend(str(x) for x in params['cbar'])
+
+    lines.extend([
+        str(params['thickness']),
+        str(params['E']),
+        str(params['nu'])
+    ])
     lines.extend(str(x) for x in params['pos0'])
     lines.extend([str(params['eta']), str(params['lambdaG']), str(params['muG']) ])
 
