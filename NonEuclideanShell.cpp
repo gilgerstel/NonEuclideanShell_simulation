@@ -44,6 +44,15 @@ m_Bpivot(),
 m_abar(),
 m_bbar(),
 m_cbar(),
+
+m_cPrefactor(0.0),
+m_K1111(0.0),
+m_K1112(0.0),
+m_K1122(0.0),
+m_K1212(0.0),
+m_K1222(0.0),
+m_K2222(0.0),
+
 m_invabar(),
 m_adjust1(1.0),
 m_adjust2(1.0),
@@ -81,6 +90,15 @@ void Face::initialize(double a_thickness,
                       const TinyMatrix<double,2> a_abar,
                       const TinyMatrix<double,2> a_bbar,
                       const TinyMatrix<double,2> a_cbar,
+
+					  double a_cPrefactor,
+                      double a_K1111,
+                      double a_K1112,
+                      double a_K1122,
+                      double a_K1212,
+                      double a_K1222,
+                      double a_K2222,
+
                       const TinyMatrix< TinyMatrix<double,2>,2 >& a_gammabar,
                       double a_eta,
                       double a_lambdaG,
@@ -90,9 +108,20 @@ void Face::initialize(double a_thickness,
 	m_thickness = a_thickness;
 	m_lambda    = a_lambda;
 	m_mu        = a_mu;
+
 	m_abar      = a_abar;
 	m_bbar      = a_bbar;
 	m_cbar      = a_cbar;
+
+	m_cPrefactor = a_cPrefactor;
+
+	m_K1111 = a_K1111;
+	m_K1112 = a_K1112;
+	m_K1122 = a_K1122;
+	m_K1212 = a_K1212;
+	m_K1222 = a_K1222;
+	m_K2222 = a_K2222;
+
     m_gammabar  = a_gammabar;
 	m_eta       = a_eta;
 
@@ -264,6 +293,18 @@ double Face::connectionEnergy() const {
 
 	return γ * factor;
 }
+
+// — third fundamental form —
+double Face::thirdFundamentalEnergy() const
+{
+    if (m_cPrefactor == 0.0)
+        return 0.0;
+
+    double Wc = thirdFundamentalEnergyContentDensity();
+
+    return m_cPrefactor * m_area * Wc;
+}
+
 /* ============================================================================== */
 /* Calculate stretching energy density */
 double Face::stretchingEnergyContentDensity() const
@@ -382,6 +423,59 @@ double Face::bendingEnergyContentDensity() const
 
     TinyMatrix<double,2> tmp = invA * (b - m_bbar);
     return (m_lambda*tmp.trace()*tmp.trace() + m_mu*(tmp*tmp).trace())/3.0;
+}
+
+/* ============================================================================== */
+/* Calculate third fundamental form energy density */
+double Face::thirdFundamentalEnergyContentDensity() const
+{
+    // Actual third fundamental form c = b a^{-1} b.
+    TinyVector<double,3> abc = ABC();
+
+    const double c11 = abc(0);
+    const double c12 = abc(1);
+    const double c22 = abc(2);
+
+    // c and cbar are symmetric tensors.
+    // Symmetrize the prescribed off-diagonal reference value in case
+    // the input contains tiny cbar12/cbar21 differences.
+    const double cbar12 = 0.5 * (m_cbar(0,1) + m_cbar(1,0));
+
+    const double dc11 = c11 - m_cbar(0,0);
+    const double dc12 = c12 - cbar12;
+    const double dc22 = c22 - m_cbar(1,1);
+
+    /*
+        Voigt-like representation for a symmetric 2D tensor:
+
+            q = [ dc11,
+                  2 dc12,
+                  dc22 ]
+
+        and
+
+            Wc = q^T Kc q
+
+        with
+
+               [ K1111  K1112  K1122 ]
+        Kc  =  [ K1112  K1212  K1222 ]
+               [ K1122  K1222  K2222 ]
+    */
+
+    const double q1 = dc11;
+    const double q2 = 2.0 * dc12;
+    const double q3 = dc22;
+
+    double Wc =
+          m_K1111 * q1 * q1
+        + 2.0 * m_K1112 * q1 * q2
+        + 2.0 * m_K1122 * q1 * q3
+        +       m_K1212 * q2 * q2
+        + 2.0 * m_K1222 * q2 * q3
+        +       m_K2222 * q3 * q3;
+
+    return Wc;
 }
 
 /* ============================================================================== */
@@ -1259,6 +1353,13 @@ void NonEuclideanShell::setParameters(double (*f_thickness)(double, double),
 									  TinyMatrix<double,2> (*f_abar)(double, double),
 									  TinyMatrix<double,2> (*f_bbar)(double, double),
 									  TinyMatrix<double,2> (*f_cbar)(double, double),
+									  double (*f_cPrefactor)(double,double),
+									  double (*f_K1111)(double,double),
+									  double (*f_K1112)(double,double),
+									  double (*f_K1122)(double,double),
+									  double (*f_K1212)(double,double),
+									  double (*f_K1222)(double,double),
+									  double (*f_K2222)(double,double),
 									  TinyVector<double,3> (*f_Pos0)(double, double),
 									  TinyMatrix<TinyMatrix<double,2>,2> (*f_gammabar)(double, double),
 									  double eta,
@@ -1277,9 +1378,48 @@ void NonEuclideanShell::setParameters(double (*f_thickness)(double, double),
 		TinyMatrix<double,2> abar      = f_abar(u,v);
 		TinyMatrix<double,2> bbar      = f_bbar(u,v);
 		TinyMatrix<double,2> cbar      = f_cbar(u,v);
+		double cPrefactor = f_cPrefactor(u,v);
+		double K1111 = f_K1111(u,v);
+		double K1112 = f_K1112(u,v);
+		double K1122 = f_K1122(u,v);
+		double K1212 = f_K1212(u,v);
+		double K1222 = f_K1222(u,v);
+		double K2222 = f_K2222(u,v);
         TinyMatrix<TinyMatrix<double,2>,2> gammabar = f_gammabar(u, v);
 
-		m_faces(i)->initialize(thickness, lambda, mu, abar, bbar, cbar, gammabar, eta, lambdaG, muG);
+		m_faces(i)->initialize(
+			thickness,
+			lambda,
+			mu,
+			abar,
+			bbar,
+			cbar,
+
+			cPrefactor,
+			K1111,
+			K1112,
+			K1122,
+			K1212,
+			K1222,
+			K2222,
+
+			gammabar,
+			eta,
+			lambdaG,
+			muG
+		);
+		if (i == 0) {
+			std::cout
+				<< "[DEBUG c-energy parameters] "
+				<< "cPrefactor=" << m_faces(i)->cPrefactor()
+				<< ", K1111=" << m_faces(i)->K1111()
+				<< ", K1112=" << m_faces(i)->K1112()
+				<< ", K1122=" << m_faces(i)->K1122()
+				<< ", K1212=" << m_faces(i)->K1212()
+				<< ", K1222=" << m_faces(i)->K1222()
+				<< ", K2222=" << m_faces(i)->K2222()
+				<< std::endl;
+		}
     }
 
     // --- initialize node positions (unchanged) ---
@@ -1449,6 +1589,23 @@ double NonEuclideanShell::connectionEnergy() const
 
     return energy;
 }
+
+/* ============================================================================== */
+/* Calculate the third fundamental form energy */
+double NonEuclideanShell::thirdFundamentalEnergy() const
+{
+    double energy = 0.0;
+
+    for (int i = 0; i < m_faces.length(); ++i)
+        energy += m_faces(i)->thirdFundamentalEnergy();
+
+    if (m_verbosity > 1)
+        std::cout << "NonEuclideanShell::thirdFundamentalEnergy() = "
+                  << energy << std::endl;
+
+    return energy;
+}
+
 // double NonEuclideanShell::connectionEnergy() const {
 //     double sum = 0.0;
 //     double maxEnergy = 0.0;
@@ -1473,17 +1630,23 @@ double NonEuclideanShell::connectionEnergy() const
 /* Calculate the total energy */
 double NonEuclideanShell::energy() const
 {
-    double energy;
-    if (m_faces.length() > 0 && m_faces(0)->getLambdaG() == 0.0 && m_faces(0)->getMuG() == 0.0) {
-    // std::cout << "[DEBUG] Skipping connection energy (lambdaG and muG are zero for all faces)\n";
-    energy = stretchingEnergy() + bendingEnergy();
-	} else {
-    energy = stretchingEnergy() + bendingEnergy() + connectionEnergy();
-	}
+    double energy =
+          stretchingEnergy()
+        + bendingEnergy()
+        + thirdFundamentalEnergy();
 
+    // Connection energy can be expensive, so retain the old skip
+    // when its stiffnesses are zero.
+    if (!(m_faces.length() > 0 &&
+          m_faces(0)->getLambdaG() == 0.0 &&
+          m_faces(0)->getMuG() == 0.0))
+    {
+        energy += connectionEnergy();
+    }
 
     if (m_verbosity > 1)
-        std::cout << "NonEuclideanShell::energy()    = " << energy << std::endl;
+        std::cout << "NonEuclideanShell::energy() = "
+                  << energy << std::endl;
 
     return energy;
 }
@@ -1560,12 +1723,15 @@ void NonEuclideanShell::DumpStateTextFormat(TextFileHandle* a_node, TextFileHand
 		// double Eg = m_faces(i)->connectionEnergyContentDensity();
 		double Es = m_faces(i)->stretchingEnergy();
 		double Eb = m_faces(i)->bendingEnergy();
+		double Ec = m_faces(i)->thirdFundamentalEnergy();
 		double Eg = m_faces(i)->connectionEnergy();
 		a_face->write(i);
 		a_face->tab();
 		a_face->write(Es);
 		a_face->tab();
 		a_face->write(Eb);
+		a_face->tab();
+		a_face->write(Ec);
 		a_face->tab();
 		a_face->write(Eg);            // ← write the γ‐energy
         a_face->tab();
@@ -1621,6 +1787,7 @@ void NonEuclideanShell::DumpFormsTextFormat(TextFileHandle* a_face)
 
 		double Es  = m_faces(i)->stretchingEnergy();
 		double Eb  = m_faces(i)->bendingEnergy();
+		double Ec  = m_faces(i)->thirdFundamentalEnergy();
 		double Eg  = m_faces(i)->connectionEnergy();
 
         a_face->write(i);        a_face->tab();
@@ -1646,6 +1813,7 @@ void NonEuclideanShell::DumpFormsTextFormat(TextFileHandle* a_face)
 
         a_face->write(Es);  a_face->tab();
 		a_face->write(Eb);  a_face->tab();
+		a_face->write(Ec);  a_face->tab();
 		a_face->write(Eg);  
         a_face->newline();
     }

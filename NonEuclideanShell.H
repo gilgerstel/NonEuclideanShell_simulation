@@ -150,6 +150,13 @@ class Face
                         const TinyMatrix<double,2> a_abar,
                         const TinyMatrix<double,2> a_bbar,
 						const TinyMatrix<double,2> a_cbar,
+						double a_cPrefactor,
+						double a_K1111,
+						double a_K1112,
+						double a_K1122,
+						double a_K1212,
+						double a_K1222,
+						double a_K2222,
                         const TinyMatrix< TinyMatrix<double,2>,2 >& a_gammabar,
 						double a_eta,
                         double a_lambdaG,
@@ -182,15 +189,22 @@ class Face
 		double stretchingEnergyContentDensity() const;
 		double bendingEnergyContentDensity() const;
 		double connectionEnergyContentDensity() const;
+		double thirdFundamentalEnergyContentDensity() const;
 
 		double stretchingEnergy() const;
 		// {return pow(m_adjust2,-6) * stretchingEnergyContentDensity() * m_area * m_thickness * m_adjust1;}
 		double bendingEnergy() const;
 		//  const {return pow(m_adjust2,-6) * bendingEnergyContentDensity() * m_area * pow(m_thickness * m_adjust1,3);}
 		double connectionEnergy() const;
+		double thirdFundamentalEnergy() const;
 		
 		//  {return pow(m_adjust2,-6) * connectionEnergyContentDensity() * m_area * pow(m_thickness * m_adjust1,3);}
-		double energy() const           {return stretchingEnergy() + bendingEnergy() + connectionEnergy();}
+		double energy() const {
+			return stretchingEnergy()
+				+ bendingEnergy()
+				+ connectionEnergy()
+				+ thirdFundamentalEnergy();
+		}
 
 		/* Calculate fundamental forms */
 		TinyVector<double,3> EFG() const;
@@ -217,6 +231,13 @@ class Face
 		// read-only access to your stored reference γ-bar and weights
 		const TinyMatrix< TinyMatrix<double,2>,2 >& gammabar() const { return m_gammabar; }
 		const TinyMatrix<double,2>& cbar() const { return m_cbar; }
+		double cPrefactor() const { return m_cPrefactor; }
+		double K1111() const { return m_K1111; }
+		double K1112() const { return m_K1112; }
+		double K1122() const { return m_K1122; }
+		double K1212() const { return m_K1212; }
+		double K1222() const { return m_K1222; }
+		double K2222() const { return m_K2222; }
 		double lambdaG() const { return m_lambdaG; }
 		double muG() const     { return m_muG; }
 
@@ -266,6 +287,14 @@ class Face
 		TinyMatrix<double,2> m_abar;
 		TinyMatrix<double,2> m_bbar;
 		TinyMatrix<double,2> m_cbar;
+		// Effective third-fundamental-form energy parameters
+		double m_cPrefactor;
+		double m_K1111;
+		double m_K1112;
+		double m_K1122;
+		double m_K1212;
+		double m_K1222;
+		double m_K2222;
 		TinyMatrix<double,2> m_invabar;
 		TinyMatrix< TinyMatrix<double,2>, 2 > m_gammabar;
 
@@ -339,6 +368,15 @@ class NonEuclideanShell
 		TinyMatrix<double,2> (*f_abar)(double,double),
 		TinyMatrix<double,2> (*f_bbar)(double,double),
 		TinyMatrix<double,2> (*f_cbar)(double,double),
+
+		double (*f_cPrefactor)(double,double),
+		double (*f_K1111)(double,double),
+		double (*f_K1112)(double,double),
+		double (*f_K1122)(double,double),
+		double (*f_K1212)(double,double),
+		double (*f_K1222)(double,double),
+		double (*f_K2222)(double,double),
+
 		TinyVector<double,3> (*f_Pos0)(double,double),
 		TinyMatrix<TinyMatrix<double,2>,2> (*f_gammabar)(double,double),
 		double eta,
@@ -363,6 +401,7 @@ class NonEuclideanShell
     double stretchingEnergy() const;
     double bendingEnergy()    const;
     double connectionEnergy() const;
+	double thirdFundamentalEnergy() const;
     double energy() const;
 
     int SizeOfOptimizationProblem() const;

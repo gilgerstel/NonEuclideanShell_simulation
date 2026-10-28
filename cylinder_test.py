@@ -29,7 +29,7 @@ create_input_files(
     sim_name=sim_name,
     output_dir=output_dir,
     domain_params=domain_params,
-    max_area=0.01,
+    max_area=0.0025,
     tols=(0.0, 0.0)
 )
 
@@ -73,6 +73,14 @@ params = {
         "1", "0",
         "0", "0"
     ],
+
+    "c_prefactor": "1",
+    "K1111": "1",
+    "K1112": "0",
+    "K1122": "0",
+    "K1212": "0",
+    "K1222": "0",
+    "K2222": "0",
 
     "thickness": "0.01",
     "E": "1.0",

@@ -318,6 +318,17 @@ def make_in_file(params, output_dir, sim_name):
     lines.extend(str(x) for x in params['bbar'])
     lines.extend(str(x) for x in params['cbar'])
 
+    lines.append(str(params['c_prefactor']))
+
+    lines.extend([
+        str(params['K1111']),
+        str(params['K1112']),
+        str(params['K1122']),
+        str(params['K1212']),
+        str(params['K1222']),
+        str(params['K2222']),
+    ])
+
     lines.extend([
         str(params['thickness']),
         str(params['E']),

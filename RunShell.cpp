@@ -49,6 +49,13 @@ void   my_fdf(const gsl_vector *, void *, double *, gsl_vector *);
 TinyMatrix<double,2> inputFunctionAbar     (double, double);
 TinyMatrix<double,2> inputFunctionBbar     (double, double);
 TinyMatrix<double,2> inputFunctionCbar     (double, double);
+double inputFunctionCPrefactor(double, double);
+double inputFunctionK1111(double, double);
+double inputFunctionK1112(double, double);
+double inputFunctionK1122(double, double);
+double inputFunctionK1212(double, double);
+double inputFunctionK1222(double, double);
+double inputFunctionK2222(double, double);
 TinyVector<double,3> inputFunctionPos0     (double, double);
 double               inputFunctionThickness(double, double);
 double               inputFunctionLambda   (double, double);
@@ -68,6 +75,15 @@ char* cbar11_formula;
 char* cbar12_formula;
 char* cbar21_formula;
 char* cbar22_formula;
+
+char* cPrefactor_formula;
+
+char* K1111_formula;
+char* K1112_formula;
+char* K1122_formula;
+char* K1212_formula;
+char* K1222_formula;
+char* K2222_formula;
 
 char* thickness_formula;
 char* Y_formula;
@@ -192,6 +208,42 @@ int main() {
 	std::cin >> inputFormula;
 	cbar22_formula = new char[inputFormula.length() + 1];
 	strcpy(cbar22_formula, inputFormula.c_str());
+
+	// Effective third-fundamental-form energy prefactor
+	std::cin >> inputFormula;
+	cPrefactor_formula = new char[inputFormula.length() + 1];
+	strcpy(cPrefactor_formula, inputFormula.c_str());
+
+	// K1111
+	std::cin >> inputFormula;
+	K1111_formula = new char[inputFormula.length() + 1];
+	strcpy(K1111_formula, inputFormula.c_str());
+
+	// K1112
+	std::cin >> inputFormula;
+	K1112_formula = new char[inputFormula.length() + 1];
+	strcpy(K1112_formula, inputFormula.c_str());
+
+	// K1122
+	std::cin >> inputFormula;
+	K1122_formula = new char[inputFormula.length() + 1];
+	strcpy(K1122_formula, inputFormula.c_str());
+
+	// K1212
+	std::cin >> inputFormula;
+	K1212_formula = new char[inputFormula.length() + 1];
+	strcpy(K1212_formula, inputFormula.c_str());
+
+	// K1222
+	std::cin >> inputFormula;
+	K1222_formula = new char[inputFormula.length() + 1];
+	strcpy(K1222_formula, inputFormula.c_str());
+
+	// K2222
+	std::cin >> inputFormula;
+	K2222_formula = new char[inputFormula.length() + 1];
+	strcpy(K2222_formula, inputFormula.c_str());
+
 	// std::cout << "Enter formula in (u,v) for the thickness " << std::endl;
 	std::cin >> inputFormula;
 	thickness_formula = new char[inputFormula.length() + 1];
@@ -388,17 +440,27 @@ int main() {
 
 
 
-    lattice.setParameters(&inputFunctionThickness,
-						  &inputFunctionLambda,
-						  &inputFunctionMu,
-						  &inputFunctionAbar,
-						  &inputFunctionBbar,
-						  &inputFunctionCbar,
-                          &inputFunctionPos0,
-                          &inputFunctionGammaBar,
+    lattice.setParameters(inputFunctionThickness,
+						  inputFunctionLambda,
+						  inputFunctionMu,
+						  inputFunctionAbar,
+						  inputFunctionBbar,
+						  inputFunctionCbar,
+
+						  inputFunctionCPrefactor,
+						  inputFunctionK1111,
+						  inputFunctionK1112,
+						  inputFunctionK1122,
+						  inputFunctionK1212,
+						  inputFunctionK1222,
+						  inputFunctionK2222,
+
+						  inputFunctionPos0,
+						  inputFunctionGammaBar,
 						  eta,
-                          lambdaG,
-                          muG);
+						  lambdaG,
+						  muG
+	);
 	lattice.setAdjust(ThicknessAdjust,
                   MetricAdjust,
                   EtaAdjust);
@@ -422,6 +484,7 @@ int main() {
 	std::cout.precision(15);
 	std::cout << "\tThe initial bending energy is " << lattice.bendingEnergy() * pow(ThicknessAdjust * MetricAdjust, 0) << std::endl;
 	std::cout << "\tThe initial stretching energy is " << lattice.stretchingEnergy() * pow(ThicknessAdjust * MetricAdjust, 0) << std::endl;
+	std::cout << "\tThe initial third fundamental form energy is "<< lattice.thirdFundamentalEnergy() << std::endl;
 	std::cout << "\tThe initial connection energy is " << lattice.connectionEnergy() * pow(ThicknessAdjust * MetricAdjust, 0) << std::endl;
 
 
@@ -570,13 +633,19 @@ int main() {
 		{
 		/* print the current energy and thickness */
 			char *space = (char*)(" ");
-			double Es = lattice.stretchingEnergy() * pow(adjustParamThickness * adjustParamMetric, 0);
-			double Eb = lattice.bendingEnergy() * pow(adjustParamThickness * adjustParamMetric, 0);
-			double Eg = lattice.connectionEnergy()  * pow(adjustParamThickness * adjustParamMetric, 0);
-			// double Es = lattice.stretchingEnergy();
-			// double Eb = lattice.bendingEnergy();
-			// double Eg = lattice.connectionEnergy();
-    		double E  = Es + Eb + Eg;
+			double Es = lattice.stretchingEnergy()
+					* pow(adjustParamThickness * adjustParamMetric, 0);
+
+			double Eb = lattice.bendingEnergy()
+					* pow(adjustParamThickness * adjustParamMetric, 0);
+
+			double Ec = lattice.thirdFundamentalEnergy();
+
+			double Eg = lattice.connectionEnergy()
+					* pow(adjustParamThickness * adjustParamMetric, 0);
+
+			double E = Es + Eb + Ec + Eg;
+
 			energyFileHandle.write(iter);
 			energyFileHandle.write(space);
 			energyFileHandle.write(E);
@@ -585,18 +654,22 @@ int main() {
 			energyFileHandle.write(space);
 			energyFileHandle.write(Eb);
 			energyFileHandle.write(space);
+			energyFileHandle.write(Ec);
+			energyFileHandle.write(space);
 			energyFileHandle.write(Eg);
-    		energyFileHandle.newline();
+			energyFileHandle.newline();
+
 			energyFileHandle.write(adjustParamMetric);
 			energyFileHandle.newline();
 
 		/* Dump the surface to the openGL file */
-			double Efinal = lattice.stretchingEnergy() + lattice.bendingEnergy() + lattice.connectionEnergy();
+			double Efinal = lattice.stretchingEnergy() + lattice.bendingEnergy() + lattice.thirdFundamentalEnergy() + lattice.connectionEnergy();
 			int PercentDone = 100*iter/NumberOfLoops;
 			std::cout.precision(15);
 			std::cout << PercentDone << "% Done: " << "The current energy is " << Efinal << std::endl;
 			std::cout << " stretch = " << lattice.stretchingEnergy()
 				<< " bend = " << lattice.bendingEnergy()
+				 << " c = " << lattice.thirdFundamentalEnergy()
 				<< " conn = " << lattice.connectionEnergy()
 				<< std::endl;
 			lattice.DumpStateTextFormat(&nodeOutputFileHandle, &faceOutputFileHandle, ++print_counter);
@@ -625,8 +698,9 @@ int main() {
 	char *space = (char*)(" ");
 	double Es = lattice.stretchingEnergy();
 	double Eb = lattice.bendingEnergy();
+	double Ec = lattice.thirdFundamentalEnergy();
 	double Eg = lattice.connectionEnergy();
-	double E = Es + Eb + Eg;
+	double E = Es + Eb + Ec + Eg;
 	energyFileHandle.write(0);
 	energyFileHandle.write(space);
 	energyFileHandle.write(E);
@@ -634,6 +708,8 @@ int main() {
 	energyFileHandle.write(Es);
 	energyFileHandle.write(space);
 	energyFileHandle.write(Eb);
+	energyFileHandle.write(space);
+	energyFileHandle.write(Ec);
 	energyFileHandle.write(space);
 	energyFileHandle.write(Eg);
 	energyFileHandle.write(space);
@@ -746,6 +822,51 @@ TinyMatrix<double,2> inputFunctionCbar(double u, double v)
     ret(1,1) = op22.Val();
 
     return ret;
+}
+
+double evaluateFormula(char* formula, double u, double v)
+{
+    RVar uvar("u", &u);
+    RVar vvar("v", &v);
+    RVar* vars[2] = { &uvar, &vvar };
+
+    ROperation op(formula, 2, vars);
+    return op.Val();
+}
+
+double inputFunctionCPrefactor(double u, double v)
+{
+    return evaluateFormula(cPrefactor_formula, u, v);
+}
+
+double inputFunctionK1111(double u, double v)
+{
+    return evaluateFormula(K1111_formula, u, v);
+}
+
+double inputFunctionK1112(double u, double v)
+{
+    return evaluateFormula(K1112_formula, u, v);
+}
+
+double inputFunctionK1122(double u, double v)
+{
+    return evaluateFormula(K1122_formula, u, v);
+}
+
+double inputFunctionK1212(double u, double v)
+{
+    return evaluateFormula(K1212_formula, u, v);
+}
+
+double inputFunctionK1222(double u, double v)
+{
+    return evaluateFormula(K1222_formula, u, v);
+}
+
+double inputFunctionK2222(double u, double v)
+{
+    return evaluateFormula(K2222_formula, u, v);
 }
 
 double inputFunctionThickness(double u, double v)
