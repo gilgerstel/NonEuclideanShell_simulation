@@ -29,7 +29,7 @@ create_input_files(
     sim_name=sim_name,
     output_dir=output_dir,
     domain_params=domain_params,
-    max_area=0.0025,
+    max_area=0.01,
     tols=(0.0, 0.0)
 )
 

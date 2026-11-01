@@ -985,61 +985,190 @@ TinyVector<double,3> Face::LMN() const
         return Lmn;
     }
 
-    // 2) otherwise: fall back to a 3×3 least‐squares on [x², 2xy, y²]
-    struct Sample { double x,y,h; };
-    std::vector<Sample> samp;
-    auto P0 = position();
-    auto n0 = calculateUnitNormal();
+    // 2) Boundary face:
+	// Fit a full quadratic height function using a larger local patch.
+	//
+	// We fit
+	//
+	// h(x,y) = A + B x + C y
+	//          + 1/2 L x^2 + M x y + 1/2 N y^2
+	//
+	// so that L, M, N are directly the components of b.
 
-    // collect only the real nodes
-    for(int i=0; i<6; ++i){
-        if (!m_nodes(i)) continue;
-        TinyVector<double,2> c = (i<3
-          ? m_nodes(i)->coordinates() - m_coordinates
-          : (i==3 ? m_nodeconnector4
-           : i==4 ? m_nodeconnector5
-                  : m_nodeconnector6));
-        double h = innerProduct(m_nodes(i)->position() - P0, n0);
-        samp.push_back({ c(0), c(1), h });
-    }
-    // need at least 3 points to fit 3 unknowns (L,2M,N)
-    if (samp.size() < 3)
-        return TinyVector<double,3>();  
+	std::vector<Node*> patchNodes;
 
-    // build the 3×3 normal equations A·c = b
-    TinyMatrix<double,3> A;  A.setToZero();
-    TinyVector<double,3> b;  b.setToZero();
+	// Helper: add a node only once.
+	auto addNode = [&](Node* p)
+	{
+		if (p == NULL)
+			return;
 
-    for(auto &s : samp){
-        double B0 = s.x*s.x;
-        double B1 =     2*s.x*s.y;
-        double B2 = s.y*s.y;
-        // accumulate A
-        A(0,0) += B0*B0;  A(0,1) += B0*B1;  A(0,2) += B0*B2;
-                          A(1,1) += B1*B1;  A(1,2) += B1*B2;
-                                             A(2,2) += B2*B2;
-        // accumulate rhs
-        b(0) += B0 * s.h;
-        b(1) += B1 * s.h;
-        b(2) += B2 * s.h;
-    }
-    // symmetrize
-    A(1,0) = A(0,1);
-    A(2,0) = A(0,2);
-    A(2,1) = A(1,2);
+		if (std::find(patchNodes.begin(), patchNodes.end(), p)
+				== patchNodes.end())
+		{
+			patchNodes.push_back(p);
+		}
+	};
 
-    // solve 3×3
-    TinyVector<int,3> piv;
-    auto Ac = A;
-    luDecompose(Ac, piv);
-    TinyVector<double,3> c3 = luSolve(Ac, piv, b);
+	// ------------------------------------------------------------
+	// First collect every real node already associated with this face.
+	// ------------------------------------------------------------
+	for (int j = 0; j < 6; ++j)
+		addNode(m_nodes(j));
 
-    // extract L, M, N
-    TinyVector<double,3> Lmn;
-    Lmn(0) = c3(0);        // L
-    Lmn(1) = c3(1) * 0.5;  // 2M → M
-    Lmn(2) = c3(2);        // N
-    return Lmn;
+	// ------------------------------------------------------------
+	// Add nodes belonging to the immediately neighboring faces.
+	// Face objects may access private members of other Face objects.
+	// ------------------------------------------------------------
+	for (int fi = 0; fi < 3; ++fi)
+	{
+		Face* f = m_faces(fi);
+
+		if (f == NULL)
+			continue;
+
+		for (int j = 0; j < 6; ++j)
+			addNode(f->m_nodes(j));
+	}
+
+	// ------------------------------------------------------------
+	// At corners we may still have too few points for a stable
+	// six-parameter quadratic fit. If necessary, add one more ring.
+	// ------------------------------------------------------------
+	if (patchNodes.size() < 8)
+	{
+		for (int fi = 0; fi < 3; ++fi)
+		{
+			Face* f = m_faces(fi);
+
+			if (f == NULL)
+				continue;
+
+			for (int fj = 0; fj < 3; ++fj)
+			{
+				Face* ff = f->m_faces(fj);
+
+				if (ff == NULL)
+					continue;
+
+				for (int j = 0; j < 6; ++j)
+					addNode(ff->m_nodes(j));
+			}
+		}
+	}
+
+	// Face center and local normal.
+	TinyVector<double,3> P0 = position();
+	TinyVector<double,3> n0 = calculateUnitNormal();
+
+	// ------------------------------------------------------------
+	// If we have enough points, perform the full quadratic fit.
+	// ------------------------------------------------------------
+	if (patchNodes.size() >= 6)
+	{
+		// Scale the material coordinates before solving.
+		// This greatly improves conditioning on fine meshes.
+		double scale = 0.0;
+
+		for (Node* p : patchNodes)
+		{
+			double x = p->coordinates()(0) - m_coordinates(0);
+			double y = p->coordinates()(1) - m_coordinates(1);
+
+			double r = std::sqrt(x*x + y*y);
+
+			if (r > scale)
+				scale = r;
+		}
+
+		if (scale > 1.e-12)
+		{
+			TinyMatrix<double,6> ATA;
+			TinyVector<double,6> ATh;
+
+			ATA.setToZero();
+			ATh.setToZero();
+
+			for (Node* p : patchNodes)
+			{
+				double x =
+					(p->coordinates()(0) - m_coordinates(0)) / scale;
+
+				double y =
+					(p->coordinates()(1) - m_coordinates(1)) / scale;
+
+				TinyVector<double,3> dr = p->position() - P0;
+				double h = innerProduct(dr, n0);
+
+				// Same quadratic convention as the interior 6×6 fit:
+				//
+				// h = A + B x + C y
+				//     + 1/2 Ls x² + Ms xy + 1/2 Ns y²
+				//
+				double phi[6];
+
+				phi[0] = 1.0;
+				phi[1] = x;
+				phi[2] = y;
+				phi[3] = 0.5 * x * x;
+				phi[4] = x * y;
+				phi[5] = 0.5 * y * y;
+
+				for (int i = 0; i < 6; ++i)
+				{
+					ATh(i) += phi[i] * h;
+
+					for (int j = 0; j < 6; ++j)
+						ATA(i,j) += phi[i] * phi[j];
+				}
+			}
+
+			// Very small regularization for numerical stability.
+			double trace = 0.0;
+
+			for (int i = 0; i < 6; ++i)
+				trace += ATA(i,i);
+
+			double avgTrace = trace / 6.0;
+
+			double reg =
+				1.e-12 * ((avgTrace > 1.0) ? avgTrace : 1.0);
+
+			for (int i = 0; i < 6; ++i)
+				ATA(i,i) += reg;
+
+			TinyVector<int,6> piv;
+
+			TinyMatrix<double,6> ATAcopy = ATA;
+
+			luDecompose(ATAcopy, piv);
+
+			TinyVector<double,6> coeff =
+				luSolve(ATAcopy, piv, ATh);
+
+			// Because x and y were divided by 'scale',
+			// second derivatives acquire 1/scale².
+			double invScale2 = 1.0 / (scale * scale);
+
+			TinyVector<double,3> Lmn;
+
+			Lmn(0) = coeff(3) * invScale2;
+			Lmn(1) = coeff(4) * invScale2;
+			Lmn(2) = coeff(5) * invScale2;
+
+			return Lmn;
+		}
+	}
+
+	// ------------------------------------------------------------
+	// Emergency fallback.
+	// This should almost never be reached, but avoids returning
+	// undefined curvature if an extremely unusual boundary patch
+	// contains too few usable nodes.
+	// ------------------------------------------------------------
+	TinyVector<double,3> zero;
+	zero.setToZero();
+	return zero;
 }
 
 /* ============================================================================== */
