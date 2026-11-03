@@ -2,3 +2,4 @@ RunShell
 __pycache__/
 baseline_output/
 cylinder_output/
+optimizer_output/

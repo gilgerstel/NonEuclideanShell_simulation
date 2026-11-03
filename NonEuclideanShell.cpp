@@ -2094,66 +2094,76 @@ void NonEuclideanShell::getEnergyAndEnergyGradient(const gsl_vector *a_state,
 	*a_energy = energy();
 }
 /* ============================================================================== */
-/* return the energy gradient given an array containing the position, Full calculation */
-void NonEuclideanShell::getEnergyGradientFull(const gsl_vector *a_state, gsl_vector *a_gradient)
+/* Full finite-difference gradient of the complete shell energy.
+ *
+ * We perturb the OPTIMIZATION VECTOR rather than individual Node positions.
+ * This is important because:
+ *
+ * 1) a face energy can depend on nodes outside its old six-node stencil
+ *    (for example the new boundary curvature fit);
+ *
+ * 2) setPositionVector() also updates slave/tied nodes consistently.
+ */
+void NonEuclideanShell::getEnergyGradientFull(
+    const gsl_vector *a_state,
+    gsl_vector *a_gradient)
 {
-	if (m_verbosity>3)  Errors::StepIn("NonEuclideanShell::getEnergyGradientFull()");
+    if (m_verbosity > 3)
+        Errors::StepIn("NonEuclideanShell::getEnergyGradientFull()");
 
-	const double* ptr     = gsl_vector_const_ptr(a_state, 0);
-	double*       ret_ptr = gsl_vector_ptr(a_gradient, 0);
-	setPositionVector(ptr);
-	double ep    = 1.e-6;
-	double Einit = energy();
-	int j = 0;
+    const double ep = 1.e-6;
+    const size_t n = a_state->size;
 
-	for (int i=0; i<m_nodes.length(); i++)
-	{
-		if (m_nodes(i)->fixed()==-2)
-		{
-			for (int comp=0; comp<3; comp++)
-			{
-				m_nodes(i)->position(comp) += ep;
-				double Eplus = energy();
-				m_nodes(i)->position(comp) -= 2*ep;
-				double Eminus = energy();
-				ret_ptr[3*j+comp] = 0.5*(Eplus-Eminus)/ep;
-				m_nodes(i)->position(comp) += ep;
-			}
-			j += 1;
-		}
-	}
+    // Working copy of the optimization variables.
+    gsl_vector *work = gsl_vector_alloc(n);
+    gsl_vector_memcpy(work, a_state);
+
+    for (size_t k = 0; k < n; ++k)
+    {
+        const double x0 = gsl_vector_get(a_state, k);
+
+        // E(x_k + ep)
+        gsl_vector_set(work, k, x0 + ep);
+        double Eplus = getEnergy(work);
+
+        // E(x_k - ep)
+        gsl_vector_set(work, k, x0 - ep);
+        double Eminus = getEnergy(work);
+
+        // Centered finite difference.
+        gsl_vector_set(
+            a_gradient,
+            k,
+            0.5 * (Eplus - Eminus) / ep
+        );
+
+        // Restore this component in the working vector.
+        gsl_vector_set(work, k, x0);
+    }
+
+    // Restore the actual shell to the requested state.
+    setPositionVector(a_state);
+
+    gsl_vector_free(work);
 }
+
+
 /* ============================================================================== */
-/* return the energy and its gradient given an array containing the position, Full calculation */
-void NonEuclideanShell::getEnergyAndEnergyGradientFull(const gsl_vector *a_state,
-								  double *a_energy, gsl_vector *a_gradient)
+/* Full energy + full finite-difference gradient */
+void NonEuclideanShell::getEnergyAndEnergyGradientFull(
+    const gsl_vector *a_state,
+    double *a_energy,
+    gsl_vector *a_gradient)
 {
-	if (m_verbosity>3)  Errors::StepIn("NonEuclideanShell::getEnergyAndEnergyGradientFull()");
+    if (m_verbosity > 3)
+        Errors::StepIn(
+            "NonEuclideanShell::getEnergyAndEnergyGradientFull()"
+        );
 
-	const double* ptr     = gsl_vector_const_ptr(a_state, 0);
-	double*       ret_ptr = gsl_vector_ptr(a_gradient, 0);
-	setPositionVector(ptr);
-	double ep    = 1.e-6;
-	double Einit = energy();
-	int j = 0;
+    getEnergyGradientFull(a_state, a_gradient);
 
-	for (int i=0; i<m_nodes.length(); i++)
-	{
-		if (m_nodes(i)->fixed()==-2)
-		{
-			for (int comp=0; comp<3; comp++)
-			{
-				m_nodes(i)->position(comp) += ep;
-				double Eplus = energy();
-				m_nodes(i)->position(comp) -= 2*ep;
-				double Eminus = energy();
-				ret_ptr[3*j+comp] = 0.5*(Eplus-Eminus)/ep;
-				m_nodes(i)->position(comp) += ep;
-			}
-			j += 1;
-		}
-	}
-	*a_energy = energy();
+    // getEnergy() also guarantees that the shell is left at a_state.
+    *a_energy = getEnergy(a_state);
 }
 
 /* ============================================================================== */

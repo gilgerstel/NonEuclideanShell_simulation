@@ -746,14 +746,26 @@ double my_f(const gsl_vector *a_x, void *a_lattice)
 
 void my_df(const gsl_vector *a_x, void *a_lattice, gsl_vector *a_df)
 {
-	NonEuclideanShell *lattice_ptr = static_cast<NonEuclideanShell*>(a_lattice);
-	lattice_ptr->getEnergyGradient(a_x, a_df);
+    NonEuclideanShell *lattice_ptr =
+        static_cast<NonEuclideanShell*>(a_lattice);
+
+    lattice_ptr->getEnergyGradientFull(a_x, a_df);
 }
 
-void my_fdf(const gsl_vector *a_x, void *a_lattice, double *a_f, gsl_vector *a_df)
+void my_fdf(
+    const gsl_vector *a_x,
+    void *a_lattice,
+    double *a_f,
+    gsl_vector *a_df)
 {
-	NonEuclideanShell *lattice_ptr = static_cast<NonEuclideanShell*>(a_lattice);
-	lattice_ptr->getEnergyAndEnergyGradient(a_x, a_f, a_df);
+    NonEuclideanShell *lattice_ptr =
+        static_cast<NonEuclideanShell*>(a_lattice);
+
+    lattice_ptr->getEnergyAndEnergyGradientFull(
+        a_x,
+        a_f,
+        a_df
+    );
 }
 
 /* ============================================================================== */
