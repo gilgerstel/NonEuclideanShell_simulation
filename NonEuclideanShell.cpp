@@ -1300,6 +1300,64 @@ TinyMatrix<TinyMatrix<double,2>,2> Face::computeConnection() const {
 //     return Gamma;
 // }
 /* ============================================================================== */
+/* Return all nodes that may influence this face's energy.
+ *
+ * The set is intentionally conservative:
+ *   - this face's six-node stencil,
+ *   - immediate neighboring faces,
+ *   - one additional ring of neighboring faces.
+ *
+ * This covers:
+ *   stretching,
+ *   bending / LMN(),
+ *   third fundamental form c = b a^{-1} b,
+ *   connection-energy metric derivatives,
+ *   and the enlarged boundary curvature patch.
+ */
+std::vector<Node*> Face::dependentNodes() const
+{
+    std::vector<Node*> deps;
+
+    auto addNode = [&](Node* p)
+    {
+        if (p == NULL)
+            return;
+
+        if (std::find(deps.begin(), deps.end(), p) == deps.end())
+            deps.push_back(p);
+    };
+
+    auto addFaceNodes = [&](const Face* f)
+    {
+        if (f == NULL)
+            return;
+
+        for (int j = 0; j < 6; ++j)
+            addNode(f->m_nodes(j));
+    };
+
+    // This face.
+    addFaceNodes(this);
+
+    // First ring.
+    for (int i = 0; i < 3; ++i)
+        addFaceNodes(m_faces(i));
+
+    // Second ring.
+    for (int i = 0; i < 3; ++i)
+    {
+        Face* f = m_faces(i);
+
+        if (f == NULL)
+            continue;
+
+        for (int j = 0; j < 3; ++j)
+            addFaceNodes(f->m_faces(j));
+    }
+
+    return deps;
+}
+/* ============================================================================== */
 /* Calculate the energy gradient */
 void Face::setForce() {
     double ep = 1.e-6;
@@ -2165,78 +2223,297 @@ void NonEuclideanShell::getEnergyAndEnergyGradientFull(
     // getEnergy() also guarantees that the shell is left at a_state.
     *a_energy = getEnergy(a_state);
 }
-
 /* ============================================================================== */
-/* Test the gradient calculation                                                 */
-void NonEuclideanShell::testGradient()
+/* Sparse/local finite-difference gradient.
+ *
+ * For each free master node, only re-evaluate faces whose energy can
+ * actually depend on that node (or on a slave node tied to it).
+ */
+void NonEuclideanShell::getEnergyGradientSparse(
+    const gsl_vector* a_state,
+    gsl_vector* a_gradient)
 {
-	int    noDOF = SizeOfOptimizationProblem();
-	double grad[noDOF], gradFull[noDOF];
+    if (m_verbosity > 3)
+        Errors::StepIn(
+            "NonEuclideanShell::getEnergyGradientSparse()"
+        );
 
-	/* calculate force */
-	initializeForce();
-	setForce();
-	int j = 0;
+    const double ep = 1.e-6;
+    const int nNodes = m_nodes.length();
 
-	for (int i=0; i<m_nodes.length(); i++)
-	{
-		if (m_nodes(i)->fixed()==-2)
-		{
-			grad[3*j]   = m_nodes(i)->force(0);
-			grad[3*j+1] = m_nodes(i)->force(1);
-			grad[3*j+2] = m_nodes(i)->force(2);
-			j += 1;
-		}
-	}
+    // Make sure the shell corresponds exactly to a_state.
+    setPositionVector(a_state);
 
-	j = 0;
+    // ------------------------------------------------------------
+    // Map Node* -> global node index.
+    // ------------------------------------------------------------
+    std::unordered_map<Node*, int> nodeIndex;
 
-	/* calculate force directly */
-	double ep    = 1.e-6;
-	for (int i=0; i<m_nodes.length(); i++)
-	{
-		if (m_nodes(i)->fixed()==-2)
-		{
-			for (int comp=0; comp<3; comp++)
-			{
-				m_nodes(i)->position(comp) += ep;
-				double Eplus = energy();
-				m_nodes(i)->position(comp) -= 2*ep;
-				double Eminus = energy();
-				gradFull[3*j+comp] = 0.5*(Eplus-Eminus)/ep;
-				m_nodes(i)->position(comp) += ep;
-			}
-			j += 1;
-		}
-	}
+    for (int i = 0; i < nNodes; ++i)
+        nodeIndex[m_nodes(i)] = i;
 
-	/* output */
-	for (int i=0; i<noDOF; i++)
-	{
-		// std::cout << grad[i] << " " << gradFull[i] << " " <<  fabs(gradFull[i]-grad[i]) << std::endl;
-		std::cout << grad[i] << " " << gradFull[i] << " " << fabs(gradFull[i]-grad[i])
-          << " " << (fabs(gradFull[i]) > 1e-10 ? fabs(gradFull[i]-grad[i])/fabs(gradFull[i]) : 0.0)
-          << std::endl;	
+    // ------------------------------------------------------------
+    // Find the free master controlling a node.
+    //
+    // fixed == -2 : free node
+    // fixed == -1 : fixed node
+    // fixed >=  0 : slave of another node
+    // ------------------------------------------------------------
+    auto masterOf = [&](int idx)
+    {
+        int guard = 0;
 
-	}
+        while (idx >= 0 && idx < nNodes && guard <= nNodes)
+        {
+            int flag = m_nodes(idx)->fixed();
 
+            if (flag == -2)
+                return idx;
 
-	}
-	const Vector<Face*>& NonEuclideanShell::getFaces() const {
-		return m_faces;
-	}
-/* ============================================================================== */
-void NonEuclideanShell::checkNodePositions() const {
-    for (int i=0; i<m_nodes.length(); ++i) {
-        for (int d=0; d<3; ++d) {
-            if (!std::isfinite(m_nodes(i)->position(d))) {
-                std::cerr << "Invalid node " << i << " pos: "
-                          << m_nodes(i)->position(0) << ", "
-                          << m_nodes(i)->position(1) << ", "
-                          << m_nodes(i)->position(2) << std::endl;
-                exit(1);
+            if (flag == -1)
+                return -1;
+
+            if (flag >= 0)
+            {
+                idx = flag;
+                ++guard;
+                continue;
+            }
+
+            return -1;
+        }
+
+        return -1;
+    };
+
+    // ------------------------------------------------------------
+    // affectedFaces[i] = all faces whose energy may depend on
+    // free master node i.
+    // ------------------------------------------------------------
+    std::vector< std::vector<Face*> >
+        affectedFaces(nNodes);
+
+    for (int fi = 0; fi < m_faces.length(); ++fi)
+    {
+        Face* f = m_faces(fi);
+
+        std::vector<Node*> deps =
+            f->dependentNodes();
+
+        for (Node* p : deps)
+        {
+            auto it = nodeIndex.find(p);
+
+            if (it == nodeIndex.end())
+                continue;
+
+            int master = masterOf(it->second);
+
+            if (master < 0)
+                continue;
+
+            auto& list = affectedFaces[master];
+
+            if (std::find(list.begin(), list.end(), f)
+                    == list.end())
+            {
+                list.push_back(f);
             }
         }
     }
+
+    // ------------------------------------------------------------
+    // Map free node -> position in the optimizer vector.
+    // ------------------------------------------------------------
+    std::vector<int> firstDof(nNodes, -1);
+
+    int dof = 0;
+
+    for (int i = 0; i < nNodes; ++i)
+    {
+        if (m_nodes(i)->fixed() == -2)
+        {
+            firstDof[i] = dof;
+            dof += 3;
+        }
+    }
+
+    gsl_vector* work =
+        gsl_vector_alloc(a_state->size);
+
+    gsl_vector_memcpy(work, a_state);
+
+    // ------------------------------------------------------------
+    // Finite difference each free DOF.
+    //
+    // Crucially, Eplus/Eminus contain only affected faces,
+    // not the entire shell.
+    // ------------------------------------------------------------
+    for (int i = 0; i < nNodes; ++i)
+    {
+        if (m_nodes(i)->fixed() != -2)
+            continue;
+
+        for (int comp = 0; comp < 3; ++comp)
+        {
+            int k = firstDof[i] + comp;
+            double x0 = gsl_vector_get(a_state, k);
+
+            // + epsilon
+            gsl_vector_set(work, k, x0 + ep);
+            setPositionVector(work);
+
+            double Eplus = 0.0;
+
+            for (Face* f : affectedFaces[i])
+                Eplus += f->energy();
+
+            // - epsilon
+            gsl_vector_set(work, k, x0 - ep);
+            setPositionVector(work);
+
+            double Eminus = 0.0;
+
+            for (Face* f : affectedFaces[i])
+                Eminus += f->energy();
+
+            gsl_vector_set(
+                a_gradient,
+                k,
+                0.5 * (Eplus - Eminus) / ep
+            );
+
+            // Restore working vector.
+            gsl_vector_set(work, k, x0);
+        }
+    }
+
+    // Restore the shell itself.
+    setPositionVector(a_state);
+
+    gsl_vector_free(work);
+}
+
+
+/* ============================================================================== */
+void NonEuclideanShell::getEnergyAndEnergyGradientSparse(
+    const gsl_vector* a_state,
+    double* a_energy,
+    gsl_vector* a_gradient)
+{
+    getEnergyGradientSparse(
+        a_state,
+        a_gradient
+    );
+
+    *a_energy = getEnergy(a_state);
+}
+/* ============================================================================== */
+/* Compare sparse gradient against the full global finite-difference gradient. */
+void NonEuclideanShell::testGradient()
+{
+    const int n = SizeOfOptimizationProblem();
+
+    gsl_vector* state =
+        gsl_vector_alloc(n);
+
+    gsl_vector* gradSparse =
+        gsl_vector_alloc(n);
+
+    gsl_vector* gradFull =
+        gsl_vector_alloc(n);
+
+    getPositionVector(state);
+
+    std::cout
+        << "Calculating sparse gradient..."
+        << std::endl;
+
+    getEnergyGradientSparse(
+        state,
+        gradSparse
+    );
+
+    std::cout
+        << "Calculating full reference gradient..."
+        << std::endl;
+
+    getEnergyGradientFull(
+        state,
+        gradFull
+    );
+
+    double diff2 = 0.0;
+    double full2 = 0.0;
+    double maxAbs = 0.0;
+    int maxIndex = -1;
+
+    for (int i = 0; i < n; ++i)
+    {
+        double gs =
+            gsl_vector_get(gradSparse, i);
+
+        double gf =
+            gsl_vector_get(gradFull, i);
+
+        double d = gs - gf;
+
+        diff2 += d*d;
+        full2 += gf*gf;
+
+        if (fabs(d) > maxAbs)
+        {
+            maxAbs = fabs(d);
+            maxIndex = i;
+        }
+    }
+
+    double relativeL2 = 0.0;
+
+    if (full2 > 0.0)
+        relativeL2 =
+            sqrt(diff2 / full2);
+
+    std::cout.precision(15);
+
+    std::cout
+        << "Gradient comparison:"
+        << std::endl;
+
+    std::cout
+        << "  relative L2 error = "
+        << relativeL2
+        << std::endl;
+
+    std::cout
+        << "  maximum absolute difference = "
+        << maxAbs
+        << std::endl;
+
+    std::cout
+        << "  worst DOF index = "
+        << maxIndex
+        << std::endl;
+
+    if (maxIndex >= 0)
+    {
+        std::cout
+            << "  sparse value = "
+            << gsl_vector_get(
+                   gradSparse,
+                   maxIndex)
+            << std::endl;
+
+        std::cout
+            << "  full value = "
+            << gsl_vector_get(
+                   gradFull,
+                   maxIndex)
+            << std::endl;
+    }
+
+    gsl_vector_free(state);
+    gsl_vector_free(gradSparse);
+    gsl_vector_free(gradFull);
 }
 

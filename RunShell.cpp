@@ -474,7 +474,7 @@ int main() {
 
 	/* temporary: test the gradient */
 	// lattice.testGradient();
-	// exit(1);
+	// exit(0);
 
 	/* ******************************************************************* */
 	/* OPTIMIZATION *** OPTIMIZATION *** OPTIMIZATION *** OPTIMIZATION *** */
@@ -749,7 +749,7 @@ void my_df(const gsl_vector *a_x, void *a_lattice, gsl_vector *a_df)
     NonEuclideanShell *lattice_ptr =
         static_cast<NonEuclideanShell*>(a_lattice);
 
-    lattice_ptr->getEnergyGradientFull(a_x, a_df);
+    lattice_ptr->getEnergyGradientSparse(a_x, a_df);
 }
 
 void my_fdf(
@@ -761,11 +761,11 @@ void my_fdf(
     NonEuclideanShell *lattice_ptr =
         static_cast<NonEuclideanShell*>(a_lattice);
 
-    lattice_ptr->getEnergyAndEnergyGradientFull(
-        a_x,
-        a_f,
-        a_df
-    );
+    lattice_ptr->getEnergyAndEnergyGradientSparse(
+		a_x,
+		a_f,
+		a_df
+	);
 }
 
 /* ============================================================================== */

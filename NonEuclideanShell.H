@@ -249,6 +249,10 @@ class Face
 		double getLambdaG() const { return m_lambdaG; }
 		double getMuG() const { return m_muG; }
 		Node* node(int i) const { return m_nodes(i); }    // 0,1,2 are the triangle’s vertices
+		// All nodes that may influence this face's energy.
+		// We use a conservative local neighborhood so the sparse
+		// finite-difference gradient cannot miss a dependency.
+		std::vector<Node*> dependentNodes() const;
 
 
 
@@ -328,6 +332,14 @@ class NonEuclideanShell
         void restart(BinaryFileHandle* a_fh);
         void getEnergyGradientFull(const gsl_vector* a_state, gsl_vector* a_gradient);
         void getEnergyAndEnergyGradientFull(const gsl_vector* a_state, double* a_energy, gsl_vector* a_gradient);
+		void getEnergyGradientSparse(
+			const gsl_vector* a_state,
+			gsl_vector* a_gradient);
+
+		void getEnergyAndEnergyGradientSparse(
+			const gsl_vector* a_state,
+			double* a_energy,
+			gsl_vector* a_gradient);
 
 		/* Constructor */
 		NonEuclideanShell(const std::string &nodesFileName,
